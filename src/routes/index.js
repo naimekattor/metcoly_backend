@@ -12,6 +12,7 @@ const bookingController = require('../controllers/bookingController');
 const documentController = require('../controllers/documentController');
 const paymentController = require('../controllers/paymentController');
 const analyticsController = require('../controllers/analyticsController');
+const calcomController = require('../controllers/calcomController');
 
 const router = express.Router();
 
@@ -49,6 +50,20 @@ router.post('/applications/:id/assign', protect, restrictTo('SUPER_ADMIN'), appl
 router.post('/applications/:id/notes', protect, restrictTo('SUPER_ADMIN', 'CONSULTANT'), applicationController.addConsultantNote);
 
 // ==================== BOOKING ROUTES ====================
+// router.get('/bookings', protect, restrictTo('SUPER_ADMIN'), bookingController.getAllBookings);
+// router.get('/bookings/my-bookings', protect, restrictTo('CLIENT'), bookingController.getMyBookings);
+// router.get('/bookings/:id', protect, bookingController.getBooking);
+// router.post('/bookings', validate(createBookingValidation), bookingController.createBooking); // Public route
+// router.patch('/bookings/:id/approve', protect, restrictTo('SUPER_ADMIN'), bookingController.approveBooking);
+// router.patch('/bookings/:id/reject', protect, restrictTo('SUPER_ADMIN'), bookingController.rejectBooking);
+// router.patch('/bookings/:id/complete', protect, restrictTo('SUPER_ADMIN'), bookingController.completeBooking);
+// router.patch('/bookings/:id/no-show', protect, restrictTo('SUPER_ADMIN'), bookingController.markNoShow);
+
+// ===== CAL.COM WEBHOOK (PUBLIC - NO AUTH) =====
+// This must be PUBLIC - Cal.com servers call this
+router.post('/calcom/webhook', calcomController.handleWebhook);
+
+// ===== YOUR EXISTING BOOKING ROUTES (unchanged) =====
 router.get('/bookings', protect, restrictTo('SUPER_ADMIN'), bookingController.getAllBookings);
 router.get('/bookings/my-bookings', protect, restrictTo('CLIENT'), bookingController.getMyBookings);
 router.get('/bookings/:id', protect, bookingController.getBooking);
@@ -57,6 +72,9 @@ router.patch('/bookings/:id/approve', protect, restrictTo('SUPER_ADMIN'), bookin
 router.patch('/bookings/:id/reject', protect, restrictTo('SUPER_ADMIN'), bookingController.rejectBooking);
 router.patch('/bookings/:id/complete', protect, restrictTo('SUPER_ADMIN'), bookingController.completeBooking);
 router.patch('/bookings/:id/no-show', protect, restrictTo('SUPER_ADMIN'), bookingController.markNoShow);
+
+// ===== OPTIONAL: Public booking lookup (for "track your booking" page) =====
+router.get('/public/bookings/:bookingReference', calcomController.getPublicBooking);
 
 // ==================== DOCUMENT ROUTES ====================
 router.post('/documents/upload',

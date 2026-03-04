@@ -34,7 +34,12 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // Body parser
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Compression
@@ -54,7 +59,7 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
-// Log error
+  // Log error
   console.error('❌ Error:', {
     message: err.message,
     stack: err.stack,
