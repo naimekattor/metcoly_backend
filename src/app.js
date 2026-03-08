@@ -45,6 +45,35 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Compression
 app.use(compression());
 
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (data) {
+    const convertValues = (obj) => {
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj === 'bigint') return obj.toString();
+      // Handle Prisma/pg Date objects that serialize as {}
+      if (obj instanceof Date) return obj.toISOString();
+      // Handle pg-specific date types that have a toISOString or toString method
+      if (typeof obj === 'object' && !Array.isArray(obj)) {
+        // Check if it's a date-like object (has toISOString but isn't a plain object)
+        if (typeof obj.toISOString === 'function') return obj.toISOString();
+        const converted = {};
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            converted[key] = convertValues(obj[key]);
+          }
+        }
+        return converted;
+      }
+      if (Array.isArray(obj)) return obj.map(convertValues);
+      return obj;
+    };
+    return originalJson.call(this, convertValues(data));
+  };
+  next();
+});
+
+
 // ==================== ROUTES ====================
 app.use('/api', routes);
 

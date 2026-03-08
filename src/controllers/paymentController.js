@@ -61,7 +61,7 @@ const createPaymentSession = catchAsync(async (req, res) => {
 
   // Create payment record
   const paymentReference = generatePaymentReference();
-  
+
   const payment = await prisma.payment.create({
     data: {
       paymentReference,
@@ -135,6 +135,16 @@ const handleWebhook = catchAsync(async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
+  if (!sig) {
+    console.error('❌ Webhook Error: No stripe-signature header value was provided.');
+    return res.status(400).send('Webhook Error: Missing stripe-signature header');
+  }
+
+  if (!req.rawBody) {
+    console.error('❌ Webhook Error: No raw body found on request.');
+    return res.status(400).send('Webhook Error: Missing request body');
+  }
+
   try {
     event = stripe.webhooks.constructEvent(
       req.rawBody,
@@ -142,7 +152,11 @@ const handleWebhook = catchAsync(async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Webhook signature verification failed:', err.message);
+    console.error('Signature received was:', sig);
+    if (err.message.includes('Unable to extract timestamp and signatures')) {
+      console.error('💡 Hint: The "stripe-signature" header must be properly formatted (e.g. t=123,v1=abc). If you are testing manually with a dummy signature (like in Postman), this error is expected. Use the Stripe CLI to test webhooks locally.');
+    }
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -321,11 +335,11 @@ const getMyPayments = catchAsync(async (req, res) => {
 
 const getAllPayments = catchAsync(async (req, res) => {
   const { status, paymentType, fromDate, toDate, page = 1, limit = 10 } = req.query;
-  
+
   const skip = (page - 1) * limit;
-  
+
   const where = {};
-  
+
   if (status) where.status = status;
   if (paymentType) where.paymentType = paymentType;
   if (fromDate || toDate) {
@@ -450,6 +464,64 @@ const refundPayment = catchAsync(async (req, res) => {
   });
 });
 
+const verifyPaymentSession = catchAsync(async (req, res) => {
+  const { sessionId } = req.params;
+
+  // Find payment record by Stripe session ID
+  const payment = await prisma.payment.findFirst({
+    where: { stripeSessionId: sessionId },
+  });
+
+  if (!payment) {
+    throw new AppError('Payment session not found', 404);
+  }
+
+  // Already confirmed as PAID in DB — patch application submittedAt if still null, then return
+  if (payment.status === PaymentStatus.PAID) {
+    if (payment.applicationId) {
+      const app = await prisma.application.findUnique({ where: { id: payment.applicationId }, select: { submittedAt: true } });
+      if (!app?.submittedAt) {
+        await prisma.application.update({
+          where: { id: payment.applicationId },
+          data: { submittedAt: payment.paidAt || new Date(), status: ApplicationStatus.SUBMITTED },
+        });
+      }
+    }
+    return res.json({ status: 'success', data: { paymentStatus: 'PAID', payment } });
+  }
+
+  // Check with Stripe directly
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (session.payment_status === 'paid') {
+    // Mark payment as PAID in DB
+    const updatedPayment = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.PAID,
+        stripePaymentIntentId: session.payment_intent,
+        paidAt: new Date(),
+      },
+    });
+
+    // Update the application: set SUBMITTED + submittedAt (idempotent — OK to call multiple times)
+    if (payment.applicationId) {
+      await prisma.application.update({
+        where: { id: payment.applicationId },
+        data: {
+          status: ApplicationStatus.SUBMITTED,
+          submittedAt: new Date(),       // Always set so frontend date is never null
+          lastStatusChangeAt: new Date(),
+        },
+      });
+    }
+
+    return res.json({ status: 'success', data: { paymentStatus: 'PAID', payment: updatedPayment } });
+  }
+
+  return res.json({ status: 'success', data: { paymentStatus: session.payment_status, payment } });
+});
+
 module.exports = {
   createPaymentSession,
   handleWebhook,
@@ -457,4 +529,6 @@ module.exports = {
   getMyPayments,
   getAllPayments,
   refundPayment,
+  verifyPaymentSession,
 };
+

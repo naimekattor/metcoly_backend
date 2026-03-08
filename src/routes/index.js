@@ -13,6 +13,7 @@ const documentController = require('../controllers/documentController');
 const paymentController = require('../controllers/paymentController');
 const analyticsController = require('../controllers/analyticsController');
 const calcomController = require('../controllers/calcomController');
+const servicesController = require('../controllers/servicesController');
 
 const router = express.Router();
 
@@ -20,6 +21,9 @@ const router = express.Router();
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// ==================== SERVICES ROUTES (PUBLIC) ====================
+router.get('/services', servicesController.getActiveServices);
 
 // ==================== AUTH ROUTES ====================
 router.post('/auth/register', validate(registerValidation), authController.register);
@@ -90,7 +94,8 @@ router.get('/documents/:id/versions', protect, documentController.getDocumentVer
 
 // ==================== PAYMENT ROUTES ====================
 router.post('/payments/create-session', protect, paymentController.createPaymentSession);
-router.post('/payments/webhook', express.raw({ type: 'application/json' }), paymentController.handleWebhook);
+router.post('/payments/webhook', paymentController.handleWebhook);
+router.get('/payments/verify-session/:sessionId', protect, paymentController.verifyPaymentSession);
 router.get('/payments/my-payments', protect, paymentController.getMyPayments);
 router.get('/payments/:id', protect, paymentController.getPaymentStatus);
 router.get('/payments', protect, restrictTo('SUPER_ADMIN'), paymentController.getAllPayments);

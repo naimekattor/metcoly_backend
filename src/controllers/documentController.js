@@ -3,7 +3,7 @@ const fileService = require('../services/fileService');
 const authService = require('../services/authService');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
-const { UserRole, ApplicationStatusag } = require('../utils/constants');
+const { UserRole, ApplicationStatus } = require('../utils/constants');
 
 const uploadDocument = catchAsync(async (req, res) => {
   if (!req.file) {
