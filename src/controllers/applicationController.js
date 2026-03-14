@@ -393,6 +393,16 @@ const submitApplication = catchAsync(async (req, res) => {
     },
   });
 
+  await prisma.applicationStatusHistory.create({
+    data: {
+      applicationId: id,
+      oldStatus: application.status,
+      newStatus: ApplicationStatus.SUBMITTED,
+      changedById: req.user.id,
+      reason: 'Initial application submission',
+    },
+  });
+
   await authService.createActivityLog(
     req.user.id,
     'APPLICATION_SUBMITTED',

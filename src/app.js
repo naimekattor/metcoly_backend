@@ -6,11 +6,46 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const AppError = require('./utils/AppError');
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
 
 const app = express();
 
-// ==================== GLOBAL MIDDLEWARE ====================
 
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: { title: 'Metcoly API', version: '1.0.0' },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
+  },
+  apis: ['./src/routes/*.js'], 
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+// Serve Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Immigration Platform API Docs'
+}));
+
+// JSON endpoint for OpenAPI spec
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+// ==================== GLOBAL MIDDLEWARE ====================
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 // Set security HTTP headers
 app.use(helmet());
 

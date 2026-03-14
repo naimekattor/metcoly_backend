@@ -27,6 +27,13 @@ const protect = catchAsync(async (req, res, next) => {
         isActive: true,
         firstName: true,
         lastName: true,
+        phone: true,
+        createdAt: true,
+        _count: {
+          select: {
+            assignedApplications: true,
+          },
+        },
       },
     });
 
