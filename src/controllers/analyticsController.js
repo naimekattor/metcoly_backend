@@ -129,13 +129,15 @@ const getDashboardStats = catchAsync(async (req, res) => {
       },
     }),
   ]);
-
   const [thisMonthRevenue, lastMonthRevenue, thisMonthApplications, thisMonthBookings] = monthlyStats;
 
-  // Calculate growth percentages
-  const revenueGrowth = lastMonthRevenue._sum.amount
-    ? ((thisMonthRevenue._sum.amount || 0) - lastMonthRevenue._sum.amount) / lastMonthRevenue._sum.amount * 100
-    : 0;
+  const thisMonthRev = thisMonthRevenue._sum.amount || 0;
+  const lastMonthRev = lastMonthRevenue._sum.amount || 0;
+
+  // If last month had revenue, calculate % change. If not but this month does, it's 100% growth.
+  const revenueGrowth = lastMonthRev > 0
+    ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 10000) / 100
+    : thisMonthRev > 0 ? 100 : 0;
 
   res.json({
     status: 'success',
@@ -173,35 +175,24 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
   const startDate = from ? new Date(from) : new Date(new Date().getFullYear(), 0, 1);
   const endDate = to ? new Date(to) : new Date();
 
-  let dateFormat;
-  switch (groupBy) {
-    case 'day':
-      dateFormat = 'YYYY-MM-DD';
-      break;
-    case 'month':
-      dateFormat = 'YYYY-MM';
-      break;
-    case 'year':
-      dateFormat = 'YYYY';
-      break;
-    default:
-      dateFormat = 'YYYY-MM';
-  }
+  // Whitelist-safe: only allow known granularity values to prevent SQL injection
+  const safeGroupBy = ['day', 'month', 'year'].includes(groupBy) ? groupBy : 'month';
+  const dateFormat = safeGroupBy === 'day' ? 'YYYY-MM-DD' : safeGroupBy === 'year' ? 'YYYY' : 'YYYY-MM';
 
-  // Get revenue by time period
-  const revenueByPeriod = await prisma.$queryRaw`
+  // Get revenue by time period — granularity must be a SQL literal, not a parameter
+  const revenueByPeriod = await prisma.$queryRawUnsafe(`
     SELECT 
-      TO_CHAR(DATE_TRUNC(${groupBy}, paid_at), ${groupBy === 'day' ? 'YYYY-MM-DD' : groupBy === 'month' ? 'YYYY-MM' : 'YYYY'}) as period,
-      COUNT(*) as transaction_count,
-      SUM(amount) as total_amount,
-      AVG(amount) as average_amount
+      TO_CHAR(DATE_TRUNC('${safeGroupBy}', paid_at), '${dateFormat}') as period,
+      COUNT(*)::int as transaction_count,
+      COALESCE(SUM(amount), 0) as total_amount,
+      COALESCE(AVG(amount), 0) as average_amount
     FROM payments
     WHERE status = 'PAID'
-      AND paid_at >= ${startDate}
-      AND paid_at <= ${endDate}
-    GROUP BY DATE_TRUNC(${groupBy}, paid_at)
-    ORDER BY period DESC
-  `;
+      AND paid_at >= $1
+      AND paid_at <= $2
+    GROUP BY DATE_TRUNC('${safeGroupBy}', paid_at)
+    ORDER BY DATE_TRUNC('${safeGroupBy}', paid_at) DESC
+  `, startDate, endDate);
 
   // Get revenue by payment type
   const revenueByType = await prisma.payment.groupBy({
@@ -220,21 +211,23 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
   });
 
   // Get revenue by service (through applications and bookings)
-  const revenueByService = await prisma.$queryRaw`
+  const revenueByService = await prisma.$queryRawUnsafe(`
     SELECT 
       s.name as service_name,
-      COUNT(DISTINCT p.id) as payment_count,
-      SUM(p.amount) as total_amount
+      COUNT(DISTINCT p.id)::int as payment_count,
+      COALESCE(SUM(p.amount), 0) as total_amount
     FROM payments p
     LEFT JOIN applications a ON p.application_id = a.id
     LEFT JOIN bookings b ON p.booking_id = b.id
     LEFT JOIN services s ON s.id = COALESCE(a.service_id, b.service_id)
     WHERE p.status = 'PAID'
-      AND p.paid_at >= ${startDate}
-      AND p.paid_at <= ${endDate}
+      AND p.paid_at >= $1
+      AND p.paid_at <= $2
     GROUP BY s.name
     ORDER BY total_amount DESC
-  `;
+  `, startDate, endDate);
+
+  const totalLen = revenueByPeriod.length || 1;
 
   res.json({
     status: 'success',
@@ -246,7 +239,7 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
       summary: {
         totalRevenue: revenueByPeriod.reduce((sum, item) => sum + Number(item.total_amount), 0),
         totalTransactions: revenueByPeriod.reduce((sum, item) => sum + Number(item.transaction_count), 0),
-        averageTransaction: revenueByPeriod.reduce((sum, item) => sum + Number(item.average_amount), 0) / revenueByPeriod.length || 0,
+        averageTransaction: revenueByPeriod.reduce((sum, item) => sum + Number(item.average_amount), 0) / totalLen,
       },
       revenueByPeriod,
       revenueByType,
