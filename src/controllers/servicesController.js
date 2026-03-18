@@ -1,3 +1,6 @@
+const prisma = require('../config/database');
+const catchAsync = require("../utils/catchAsync");
+
 const getActiveServices = catchAsync(async (req, res) => {
     const services = await prisma.service.findMany({
         where: { isActive: true },
