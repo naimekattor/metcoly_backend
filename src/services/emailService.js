@@ -14,22 +14,18 @@ class EmailService {
   }
 
   async sendWelcomeEmail(user) {
-    const mailOptions = {
-      from: '"Immigration Platform" <noreply@immigration.com>',
-      to: user.email,
-      subject: 'Welcome to Immigration Platform',
-      html: `
-        <h1>Welcome ${user.firstName}!</h1>
-        <p>Thank you for joining our immigration consultation platform.</p>
-        <p>You can now <a href="${process.env.FRONTEND_URL}/login">login</a> to your account.</p>
-      `,
-    };
+    const subject = 'Welcome to Immigration Platform';
+    const html = `
+      <h1>Welcome ${user.firstName}!</h1>
+      <p>Thank you for joining our immigration consultation platform.</p>
+      <p>You can now <a href="${process.env.FRONTEND_URL}/login">login</a> to your account.</p>
+    `;
 
-    await this.transporter.sendMail(mailOptions);
+    return await this.sendEmail(user.email, subject, html);
   }
 
   // Generic mail sender helper
-  async sendEmail(to, subject, html) {
+  async sendEmail(to, subject, html, shouldThrow = false) {
     console.log(`📨 Preparing to send email to: ${to} | Subject: ${subject}`);
     const mailOptions = {
       from: process.env.EMAIL_FROM || '"Immigration Platform" <noreply@immigration.com>',
@@ -43,8 +39,9 @@ class EmailService {
       console.log('✨ Email sent: %s', info.messageId);
       return info;
     } catch (error) {
-      console.error('🔥 Error sending email:', error);
-      throw error;
+      console.error('🔥 Error sending email:', error.message);
+      if (shouldThrow) throw error;
+      return null; // Return null instead of throwing to prevent API crashes
     }
   }
 
@@ -83,36 +80,28 @@ class EmailService {
   }
 
   async sendBookingConfirmation(booking, user) {
-    const mailOptions = {
-      from: '"Immigration Platform" <noreply@immigration.com>',
-      to: user?.email || booking.clientEmail,
-      subject: 'Booking Confirmation',
-      html: `
-        <h1>Booking Confirmed!</h1>
-        <p>Your consultation has been booked for:</p>
-        <p><strong>Date:</strong> ${new Date(booking.scheduledStart).toLocaleString()}</p>
-        <p><strong>Duration:</strong> ${(new Date(booking.scheduledEnd) - new Date(booking.scheduledStart)) / 60000} minutes</p>
-        ${booking.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${booking.meetingLink}">${booking.meetingLink}</a></p>` : ''}
-      `,
-    };
+    const subject = 'Booking Confirmation';
+    const html = `
+      <h1>Booking Confirmed!</h1>
+      <p>Your consultation has been booked for:</p>
+      <p><strong>Date:</strong> ${new Date(booking.scheduledStart).toLocaleString()}</p>
+      <p><strong>Duration:</strong> ${(new Date(booking.scheduledEnd) - new Date(booking.scheduledStart)) / 60000} minutes</p>
+      ${booking.meetingLink ? `<p><strong>Meeting Link:</strong> <a href="${booking.meetingLink}">${booking.meetingLink}</a></p>` : ''}
+    `;
 
-    await this.transporter.sendMail(mailOptions);
+    return await this.sendEmail(user?.email || booking.clientEmail, subject, html);
   }
 
   async sendApplicationStatusUpdate(application, user) {
-    const mailOptions = {
-      from: '"Immigration Platform" <noreply@immigration.com>',
-      to: user.email,
-      subject: 'Application Status Update',
-      html: `
-        <h1>Application #${application.applicationNumber}</h1>
-        <p>Your application status has been updated to: <strong>${application.status}</strong></p>
-        <p>Login to your account to view more details.</p>
-      `,
-    };
+    const subject = 'Application Status Update';
+    const html = `
+      <h1>Application #${application.applicationNumber}</h1>
+      <p>Your application status has been updated to: <strong>${application.status}</strong></p>
+      <p>Login to your account to view more details.</p>
+    `;
 
-    await this.transporter.sendMail(mailOptions);
+    return await this.sendEmail(user.email, subject, html);
   }
 }
 
-module.exports = new EmailService();
+module.exports = new EmailService();

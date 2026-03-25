@@ -1,0 +1,1595 @@
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     User:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         email:
+ *           type: string
+ *           format: email
+ *         firstName:
+ *           type: string
+ *         lastName:
+ *           type: string
+ *         role:
+ *           type: string
+ *           enum: [SUPER_ADMIN, CONSULTANT, CLIENT]
+ *         isActive:
+ *           type: boolean
+ *         phone:
+ *           type: string
+ *         profilePictureUrl:
+ *           type: string
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *     
+ *     Application:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         applicationNumber:
+ *           type: string
+ *         status:
+ *           type: string
+ *           enum: [DRAFT, SUBMITTED, UNDER_REVIEW, DOCUMENTS_MISSING, PROCESSING, APPROVED, REJECTED, CLOSED]
+ *         country:
+ *           type: string
+ *         formData:
+ *           type: object
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *     
+ *     Booking:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         bookingReference:
+ *           type: string
+ *         clientName:
+ *           type: string
+ *         clientEmail:
+ *           type: string
+ *           format: email
+ *         scheduledStart:
+ *           type: string
+ *           format: date-time
+ *         scheduledEnd:
+ *           type: string
+ *           format: date-time
+ *         bookingStatus:
+ *           type: string
+ *           enum: [PENDING, APPROVED, REJECTED, COMPLETED, NO_SHOW]
+ *         meetingLink:
+ *           type: string
+ *     
+ *     Document:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         fileName:
+ *           type: string
+ *         fileSize:
+ *           type: number
+ *         mimeType:
+ *           type: string
+ *         documentType:
+ *           type: string
+ *         version:
+ *           type: number
+ *         uploadedAt:
+ *           type: string
+ *           format: date-time
+ *     
+ *     Payment:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         paymentReference:
+ *           type: string
+ *         amount:
+ *           type: number
+ *         currency:
+ *           type: string
+ *         status:
+ *           type: string
+ *           enum: [PENDING, PAID, FAILED, REFUNDED]
+ *         paymentType:
+ *           type: string
+ *           enum: [CONSULTATION, PROCESSING]
+ *         paidAt:
+ *           type: string
+ *           format: date-time
+ *     
+ *     Service:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         name:
+ *           type: string
+ *         description:
+ *           type: string
+ *         basePrice:
+ *           type: number
+ *         currency:
+ *           type: string
+ *         isActive:
+ *           type: boolean
+ *     
+ *     Error:
+ *       type: object
+ *       properties:
+ *         status:
+ *           type: string
+ *           example: error
+ *         message:
+ *           type: string
+ *     
+ *     LoginRequest:
+ *       type: object
+ *       required:
+ *         - email
+ *         - password
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *         password:
+ *           type: string
+ *           format: password
+ *     
+ *     RegisterRequest:
+ *       type: object
+ *       required:
+ *         - email
+ *         - password
+ *         - firstName
+ *         - lastName
+ *       properties:
+ *         email:
+ *           type: string
+ *           format: email
+ *         password:
+ *           type: string
+ *           format: password
+ *         firstName:
+ *           type: string
+ *         lastName:
+ *           type: string
+ *         phone:
+ *           type: string
+ *     
+ *     AuthResponse:
+ *       type: object
+ *       properties:
+ *         status:
+ *           type: string
+ *           example: success
+ *         data:
+ *           type: object
+ *           properties:
+ *             user:
+ *               $ref: '#/components/schemas/User'
+ *             accessToken:
+ *               type: string
+ *             refreshToken:
+ *               type: string
+ *     
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
+ *     
+ *   responses:
+ *     UnauthorizedError:
+ *       description: Access token is missing or invalid
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Error'
+ *     ForbiddenError:
+ *       description: Insufficient permissions
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Error'
+ *     NotFoundError:
+ *       description: Resource not found
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Error'
+ */
+
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     tags: [System]
+ *     summary: Health check endpoint
+ *     description: Returns the current status of the API server
+ *     responses:
+ *       200:
+ *         description: Server is up and running
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
+
+/**
+ * @swagger
+ * /api/services:
+ *   get:
+ *     tags: [Services]
+ *     summary: Get all active services
+ *     description: Returns a list of all active immigration services
+ *     responses:
+ *       200:
+ *         description: List of services
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     services:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Service'
+ */
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Register a new client
+ *     description: Creates a new client account
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       400:
+ *         description: Validation error or user already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Login user
+ *     description: Authenticates user and returns JWT tokens
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
+/**
+ * @swagger
+ * /api/auth/refresh-token:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Refresh access token
+ *     description: Get a new access token using refresh token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: New tokens generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken:
+ *                       type: string
+ *                     refreshToken:
+ *                       type: string
+ *       401:
+ *         description: Invalid refresh token
+ */
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Logout user
+ *     description: Logs out the currently authenticated user
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     tags: [Authentication]
+ *     summary: Get current user
+ *     description: Returns the profile of the currently authenticated user
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ */
+
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get all users (Admin only)
+ *     description: Returns a paginated list of all users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [SUPER_ADMIN, CONSULTANT, CLIENT]
+ *         description: Filter by role
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: boolean
+ *         description: Filter by active status
+ *     responses:
+ *       200:
+ *         description: List of users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 results:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 currentPage:
+ *                   type: integer
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/User'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get user by ID (Admin only)
+ *     description: Returns detailed information about a specific user
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+
+/**
+ * @swagger
+ * /api/users/consultant:
+ *   post:
+ *     tags: [Users]
+ *     summary: Create consultant (Admin only)
+ *     description: Creates a new consultant user and sends invitation email
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - firstName
+ *               - lastName
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Consultant invitation sent
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}/deactivate:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Deactivate user (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: User deactivated
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}/activate:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Activate user (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: User activated
+ */
+
+/**
+ * @swagger
+ * /api/users/profile:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Update user profile
+ *     description: Updates the profile of the currently authenticated user
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ */
+
+/**
+ * @swagger
+ * /api/users/accept-invitation:
+ *   post:
+ *     tags: [Users]
+ *     summary: Accept invitation
+ *     description: Accepts consultant invitation and creates account
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *               - firstName
+ *               - lastName
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 format: password
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Account created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ */
+
+/**
+ * @swagger
+ * /api/applications:
+ *   get:
+ *     tags: [Applications]
+ *     summary: Get all applications (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, SUBMITTED, UNDER_REVIEW, DOCUMENTS_MISSING, PROCESSING, APPROVED, REJECTED, CLOSED]
+ *       - in: query
+ *         name: consultantId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: fromDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: toDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: List of applications
+ */
+
+/**
+ * @swagger
+ * /api/applications/my-applications:
+ *   get:
+ *     tags: [Applications]
+ *     summary: Get client's applications
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Client's applications
+ */
+
+/**
+ * @swagger
+ * /api/applications/consultant:
+ *   get:
+ *     tags: [Applications]
+ *     summary: Get consultant's assigned applications
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Consultant's applications
+ */
+
+/**
+ * @swagger
+ * /api/applications/{id}:
+ *   get:
+ *     tags: [Applications]
+ *     summary: Get application by ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Application details
+ *       404:
+ *         description: Application not found
+ */
+
+/**
+ * @swagger
+ * /api/applications:
+ *   post:
+ *     tags: [Applications]
+ *     summary: Create new application
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               serviceId:
+ *                 type: string
+ *               country:
+ *                 type: string
+ *               formData:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Application created
+ */
+
+/**
+ * @swagger
+ * /api/applications/{id}:
+ *   patch:
+ *     tags: [Applications]
+ *     summary: Update application (Client only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               formData:
+ *                 type: object
+ *               country:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Application updated
+ */
+
+/**
+ * @swagger
+ * /api/applications/{id}/submit:
+ *   patch:
+ *     tags: [Applications]
+ *     summary: Submit application (Client only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Application submitted
+ */
+
+/**
+ * @swagger
+ * /api/applications/{id}/status:
+ *   patch:
+ *     tags: [Applications]
+ *     summary: Update application status (Admin/Consultant only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, SUBMITTED, UNDER_REVIEW, DOCUMENTS_MISSING, PROCESSING, APPROVED, REJECTED, CLOSED]
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ */
+
+/**
+ * @swagger
+ * /api/applications/{id}/assign:
+ *   post:
+ *     tags: [Applications]
+ *     summary: Assign consultant to application (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - consultantId
+ *             properties:
+ *               consultantId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Consultant assigned
+ */
+
+/**
+ * @swagger
+ * /api/applications/{id}/notes:
+ *   post:
+ *     tags: [Applications]
+ *     summary: Add note to application (Admin/Consultant only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - noteType
+ *               - content
+ *             properties:
+ *               noteType:
+ *                 type: string
+ *                 enum: [INTERNAL, CLIENT_VISIBLE]
+ *               content:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Note added
+ */
+
+/**
+ * @swagger
+ * /api/calcom/webhook:
+ *   post:
+ *     tags: [Cal.com]
+ *     summary: Cal.com webhook endpoint
+ *     description: Receives booking events from Cal.com (public endpoint)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Webhook received
+ */
+
+/**
+ * @swagger
+ * /api/bookings:
+ *   get:
+ *     tags: [Bookings]
+ *     summary: Get all bookings (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, APPROVED, REJECTED, COMPLETED, NO_SHOW]
+ *       - in: query
+ *         name: fromDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: toDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: List of bookings
+ */
+
+/**
+ * @swagger
+ * /api/bookings/my-bookings:
+ *   get:
+ *     tags: [Bookings]
+ *     summary: Get client's bookings
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Client's bookings
+ */
+
+/**
+ * @swagger
+ * /api/bookings/{id}:
+ *   get:
+ *     tags: [Bookings]
+ *     summary: Get booking by ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Booking details
+ */
+
+/**
+ * @swagger
+ * /api/bookings:
+ *   post:
+ *     tags: [Bookings]
+ *     summary: Create new booking (Public)
+ *     description: Create a consultation booking (no authentication required)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - clientName
+ *               - clientEmail
+ *               - scheduledStart
+ *               - scheduledEnd
+ *             properties:
+ *               clientName:
+ *                 type: string
+ *               clientEmail:
+ *                 type: string
+ *                 format: email
+ *               clientPhone:
+ *                 type: string
+ *               serviceId:
+ *                 type: string
+ *               scheduledStart:
+ *                 type: string
+ *                 format: date-time
+ *               scheduledEnd:
+ *                 type: string
+ *                 format: date-time
+ *               timezone:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Booking created
+ */
+
+/**
+ * @swagger
+ * /api/bookings/{id}/approve:
+ *   patch:
+ *     tags: [Bookings]
+ *     summary: Approve booking (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               meetingLink:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Booking approved
+ */
+
+/**
+ * @swagger
+ * /api/bookings/{id}/reject:
+ *   patch:
+ *     tags: [Bookings]
+ *     summary: Reject booking (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Booking rejected
+ */
+
+/**
+ * @swagger
+ * /api/bookings/{id}/complete:
+ *   patch:
+ *     tags: [Bookings]
+ *     summary: Mark booking as completed (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Booking completed
+ */
+
+/**
+ * @swagger
+ * /api/bookings/{id}/no-show:
+ *   patch:
+ *     tags: [Bookings]
+ *     summary: Mark booking as no-show (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Booking marked as no-show
+ */
+
+/**
+ * @swagger
+ * /api/public/bookings/{bookingReference}:
+ *   get:
+ *     tags: [Bookings]
+ *     summary: Public booking lookup
+ *     description: Get booking details by reference (public endpoint)
+ *     parameters:
+ *       - in: path
+ *         name: bookingReference
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Booking details
+ */
+
+/**
+ * @swagger
+ * /api/documents/upload:
+ *   post:
+ *     tags: [Documents]
+ *     summary: Upload document
+ *     description: Upload a document for an application
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - applicationId
+ *               - document
+ *             properties:
+ *               applicationId:
+ *                 type: string
+ *               documentType:
+ *                 type: string
+ *               document:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Document uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     document:
+ *                       $ref: '#/components/schemas/Document'
+ */
+
+/**
+ * @swagger
+ * /api/documents/application/{applicationId}:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Get application documents
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: applicationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of documents
+ */
+
+/**
+ * @swagger
+ * /api/documents/{id}/download:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Download document
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Document file
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+
+/**
+ * @swagger
+ * /api/documents/{id}:
+ *   delete:
+ *     tags: [Documents]
+ *     summary: Delete document
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Document deleted
+ */
+
+/**
+ * @swagger
+ * /api/documents/{id}/versions:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Get document versions
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Document versions
+ */
+
+/**
+ * @swagger
+ * /api/payments/create-session:
+ *   post:
+ *     tags: [Payments]
+ *     summary: Create Stripe checkout session
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - paymentType
+ *             properties:
+ *               applicationId:
+ *                 type: string
+ *               bookingId:
+ *                 type: string
+ *               paymentType:
+ *                 type: string
+ *                 enum: [CONSULTATION, PROCESSING]
+ *     responses:
+ *       200:
+ *         description: Checkout session created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     sessionId:
+ *                       type: string
+ *                     url:
+ *                       type: string
+ */
+
+/**
+ * @swagger
+ * /api/payments/webhook:
+ *   post:
+ *     tags: [Payments]
+ *     summary: Stripe webhook endpoint
+ *     description: Receives payment events from Stripe (public endpoint)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Webhook received
+ */
+
+/**
+ * @swagger
+ * /api/payments/verify-session/{sessionId}:
+ *   get:
+ *     tags: [Payments]
+ *     summary: Verify payment session
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Session verification result
+ */
+
+/**
+ * @swagger
+ * /api/payments/my-payments:
+ *   get:
+ *     tags: [Payments]
+ *     summary: Get user's payments
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of user's payments
+ */
+
+/**
+ * @swagger
+ * /api/payments/{id}:
+ *   get:
+ *     tags: [Payments]
+ *     summary: Get payment status
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Payment details
+ */
+
+/**
+ * @swagger
+ * /api/payments:
+ *   get:
+ *     tags: [Payments]
+ *     summary: Get all payments (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, PAID, FAILED, REFUNDED]
+ *       - in: query
+ *         name: paymentType
+ *         schema:
+ *           type: string
+ *           enum: [CONSULTATION, PROCESSING]
+ *       - in: query
+ *         name: fromDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: toDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: List of payments
+ */
+
+/**
+ * @swagger
+ * /api/payments/{id}/refund:
+ *   post:
+ *     tags: [Payments]
+ *     summary: Refund payment (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Payment refunded
+ */
+
+/**
+ * @swagger
+ * /api/analytics/dashboard:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Get dashboard statistics (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics
+ */
+
+/**
+ * @swagger
+ * /api/analytics/revenue:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Get revenue analytics (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: groupBy
+ *         schema:
+ *           type: string
+ *           enum: [day, month, year]
+ *     responses:
+ *       200:
+ *         description: Revenue analytics
+ */
+
+/**
+ * @swagger
+ * /api/analytics/applications:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Get application analytics (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Application analytics
+ */
+
+/**
+ * @swagger
+ * /api/analytics/consultants/performance:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Get consultant performance (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Consultant performance metrics
+ */
+
+/**
+ * @swagger
+ * /api/analytics/logs:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Get activity logs (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: actionType
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: fromDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: toDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Activity logs
+ */
