@@ -492,7 +492,14 @@ const updateApplicationStatus = catchAsync(async (req, res) => {
   );
 
   // Notify client
-  await emailService.sendApplicationStatusUpdate(updatedApplication, updatedApplication.client);
+  try {
+    if (updatedApplication.client && updatedApplication.client.email) {
+      await emailService.sendApplicationStatusUpdate(updatedApplication, updatedApplication.client);
+    }
+  } catch (emailError) {
+    console.error('Failed to send status update email:', emailError);
+    // Don't throw error here, as the status update in DB was successful
+  }
 
   res.json({
     status: 'success',

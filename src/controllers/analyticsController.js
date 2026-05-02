@@ -189,19 +189,19 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
   }
 
   // Get revenue by time period
-  const revenueByPeriod = await prisma.$queryRaw`
+  const revenueByPeriod = await prisma.$queryRawUnsafe(`
     SELECT 
-      TO_CHAR(DATE_TRUNC(${groupBy}, paid_at), ${groupBy === 'day' ? 'YYYY-MM-DD' : groupBy === 'month' ? 'YYYY-MM' : 'YYYY'}) as period,
+      TO_CHAR(DATE_TRUNC('${groupBy}', "paidAt"), ${groupBy === 'day' ? "'YYYY-MM-DD'" : groupBy === 'month' ? "'YYYY-MM'" : "'YYYY'"}) as period,
       COUNT(*) as transaction_count,
       SUM(amount) as total_amount,
       AVG(amount) as average_amount
     FROM payments
     WHERE status = 'PAID'
-      AND paid_at >= ${startDate}
-      AND paid_at <= ${endDate}
-    GROUP BY DATE_TRUNC(${groupBy}, paid_at)
+      AND "paidAt" >= '${startDate.toISOString()}'
+      AND "paidAt" <= '${endDate.toISOString()}'
+    GROUP BY DATE_TRUNC('${groupBy}', "paidAt")
     ORDER BY period DESC
-  `;
+  `);
 
   // Get revenue by payment type
   const revenueByType = await prisma.payment.groupBy({
@@ -220,21 +220,21 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
   });
 
   // Get revenue by service (through applications and bookings)
-  const revenueByService = await prisma.$queryRaw`
+  const revenueByService = await prisma.$queryRawUnsafe(`
     SELECT 
       s.name as service_name,
       COUNT(DISTINCT p.id) as payment_count,
       SUM(p.amount) as total_amount
     FROM payments p
-    LEFT JOIN applications a ON p.application_id = a.id
-    LEFT JOIN bookings b ON p.booking_id = b.id
-    LEFT JOIN services s ON s.id = COALESCE(a.service_id, b.service_id)
+    LEFT JOIN applications a ON p."applicationId" = a.id
+    LEFT JOIN bookings b ON p."bookingId" = b.id
+    LEFT JOIN services s ON s.id = COALESCE(a."serviceId", b."serviceId")
     WHERE p.status = 'PAID'
-      AND p.paid_at >= ${startDate}
-      AND p.paid_at <= ${endDate}
+      AND p."paidAt" >= '${startDate.toISOString()}'
+      AND p."paidAt" <= '${endDate.toISOString()}'
     GROUP BY s.name
     ORDER BY total_amount DESC
-  `;
+  `);
 
   res.json({
     status: 'success',
@@ -262,31 +262,31 @@ const getApplicationAnalytics = catchAsync(async (req, res) => {
   const endDate = to ? new Date(to) : new Date();
 
   // Applications over time
-  const applicationsOverTime = await prisma.$queryRaw`
+  const applicationsOverTime = await prisma.$queryRawUnsafe(`
     SELECT 
-      TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
+      TO_CHAR(DATE_TRUNC('month', "createdAt"), 'YYYY-MM') as month,
       COUNT(*) as total_applications,
       SUM(CASE WHEN status = 'SUBMITTED' THEN 1 ELSE 0 END) as submitted,
       SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) as approved,
       SUM(CASE WHEN status = 'REJECTED' THEN 1 ELSE 0 END) as rejected
     FROM applications
-    WHERE created_at >= ${startDate}
-      AND created_at <= ${endDate}
-    GROUP BY DATE_TRUNC('month', created_at)
+    WHERE "createdAt" >= '${startDate.toISOString()}'
+      AND "createdAt" <= '${endDate.toISOString()}'
+    GROUP BY DATE_TRUNC('month', "createdAt")
     ORDER BY month DESC
-  `;
+  `);
 
   // Average processing time
-  const processingTime = await prisma.$queryRaw`
+  const processingTime = await prisma.$queryRawUnsafe(`
     SELECT 
-      AVG(EXTRACT(EPOCH FROM (closed_at - submitted_at)) / 86400) as avg_days_to_close,
-      AVG(EXTRACT(EPOCH FROM (approved_at - submitted_at)) / 86400) as avg_days_to_approve
+      AVG(EXTRACT(EPOCH FROM ("closedAt" - "submittedAt")) / 86400) as avg_days_to_close,
+      AVG(EXTRACT(EPOCH FROM ("approvedAt" - "submittedAt")) / 86400) as avg_days_to_approve
     FROM applications
-    WHERE submitted_at IS NOT NULL
-      AND (closed_at IS NOT NULL OR approved_at IS NOT NULL)
-      AND created_at >= ${startDate}
-      AND created_at <= ${endDate}
-  `;
+    WHERE "submittedAt" IS NOT NULL
+      AND ("closedAt" IS NOT NULL OR "approvedAt" IS NOT NULL)
+      AND "createdAt" >= '${startDate.toISOString()}'
+      AND "createdAt" <= '${endDate.toISOString()}'
+  `);
 
   // Top countries
   const topCountries = await prisma.application.groupBy({
@@ -327,30 +327,30 @@ const getConsultantPerformance = catchAsync(async (req, res) => {
   const startDate = from ? new Date(from) : new Date(new Date().getFullYear(), 0, 1);
   const endDate = to ? new Date(to) : new Date();
 
-  const consultantPerformance = await prisma.$queryRaw`
+  const consultantPerformance = await prisma.$queryRawUnsafe(`
     SELECT 
       u.id,
-      u.first_name,
-      u.last_name,
+      u."firstName",
+      u."lastName",
       u.email,
-      COUNT(DISTINCT ca.application_id) as total_assigned,
+      COUNT(DISTINCT ca."applicationId") as total_assigned,
       COUNT(DISTINCT CASE WHEN a.status = 'APPROVED' THEN a.id END) as approved_applications,
       COUNT(DISTINCT CASE WHEN a.status = 'REJECTED' THEN a.id END) as rejected_applications,
       COUNT(DISTINCT cn.id) as total_notes,
       AVG(CASE 
-        WHEN a.closed_at IS NOT NULL AND a.submitted_at IS NOT NULL 
-        THEN EXTRACT(EPOCH FROM (a.closed_at - a.submitted_at)) / 86400 
+        WHEN a."closedAt" IS NOT NULL AND a."submittedAt" IS NOT NULL 
+        THEN EXTRACT(EPOCH FROM (a."closedAt" - a."submittedAt")) / 86400 
         ELSE NULL 
       END) as avg_processing_days
     FROM users u
-    LEFT JOIN consultant_assignments ca ON u.id = ca.consultant_id
-    LEFT JOIN applications a ON ca.application_id = a.id
-    LEFT JOIN consultant_notes cn ON u.id = cn.consultant_id AND cn.created_at BETWEEN ${startDate} AND ${endDate}
+    LEFT JOIN consultant_assignments ca ON u.id = ca."consultantId"
+    LEFT JOIN applications a ON ca."applicationId" = a.id
+    LEFT JOIN consultant_notes cn ON u.id = cn."consultantId" AND cn."createdAt" BETWEEN '${startDate.toISOString()}' AND '${endDate.toISOString()}'
     WHERE u.role = 'CONSULTANT'
-      AND ca.assigned_at BETWEEN ${startDate} AND ${endDate}
-    GROUP BY u.id, u.first_name, u.last_name, u.email
+      AND ca."assignedAt" BETWEEN '${startDate.toISOString()}' AND '${endDate.toISOString()}'
+    GROUP BY u.id, u."firstName", u."lastName", u.email
     ORDER BY total_assigned DESC
-  `;
+  `);
 
   res.json({
     status: 'success',

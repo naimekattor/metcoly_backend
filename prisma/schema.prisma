@@ -59,6 +59,8 @@ model User {
   phone             String?
   profilePictureUrl String?
   lastLoginAt       DateTime?
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deactivatedAt     DateTime?
