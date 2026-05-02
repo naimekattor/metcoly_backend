@@ -6,6 +6,281 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id                    String                     @id @default(uuid())
+  email                 String                     @unique
+  passwordHash          String
+  firstName             String
+  lastName              String
+  role                  UserRole
+  isActive              Boolean                    @default(true)
+  phone                 String?
+  profilePictureUrl     String?
+  lastLoginAt           DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  deactivatedAt         DateTime?
+  deactivatedById       String?
+  activities            ActivityLog[]
+  statusChanges         ApplicationStatusHistory[]
+  applicationsAssigned  Application[]              @relation("ApplicationAssignedBy")
+  applications          Application[]
+  assignedApplications  Application[]              @relation("ConsultantApplications")
+  approvedBookings      Booking[]                  @relation("BookingApprovedBy")
+  bookings              Booking[]
+  assignmentsMade       ConsultantAssignment[]     @relation("AssignmentsMade")
+  consultantAssignments ConsultantAssignment[]     @relation("ConsultantAssignment")
+  assignmentsUnmade     ConsultantAssignment[]     @relation("AssignmentsUnmade")
+  notes                 ConsultantNote[]
+  documentVersions      DocumentVersion[]
+  documents             Document[]
+  invitationsSent       Invitation[]
+  payments              Payment[]
+  deactivatedBy         User?                      @relation("UserDeactivated", fields: [deactivatedById], references: [id])
+  deactivatedUsers      User[]                     @relation("UserDeactivated")
+
+  @@map("users")
+}
+
+model Service {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  serviceType  String?
+  basePrice    Float?
+  currency     String        @default("USD")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  applications Application[]
+  bookings     Booking[]
+
+  @@map("services")
+}
+
+model Booking {
+  id                 String        @id @default(uuid())
+  bookingReference   String        @unique
+  clientId           String?
+  clientEmail        String
+  clientName         String
+  clientPhone        String?
+  serviceId          String?
+  bookingStatus      BookingStatus @default(PENDING)
+  scheduledStart     DateTime
+  scheduledEnd       DateTime
+  timezone           String?
+  meetingLink        String?
+  notes              String?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  approvedById       String?
+  approvedAt         DateTime?
+  completedAt        DateTime?
+  approvedBy         User?         @relation("BookingApprovedBy", fields: [approvedById], references: [id])
+  client             User?         @relation(fields: [clientId], references: [id])
+  service            Service?      @relation(fields: [serviceId], references: [id])
+  payment            Payment?
+
+  @@index([clientId])
+  @@index([bookingStatus])
+  @@index([scheduledStart])
+  @@map("bookings")
+}
+
+model Application {
+  id                    String                     @id @default(uuid())
+  applicationNumber     String                     @unique
+  clientId              String
+  consultantId          String?
+  serviceId             String?
+  status                ApplicationStatus          @default(DRAFT)
+  formData              Json?
+  country               String?
+  submissionDate        DateTime?
+  submittedAt           DateTime?
+  assignedById          String?
+  assignedAt            DateTime?
+  lastStatusChangeAt    DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  closedAt              DateTime?
+  closedReason          String?
+  statusHistory         ApplicationStatusHistory[]
+  assignedBy            User?                      @relation("ApplicationAssignedBy", fields: [assignedById], references: [id])
+  client                User                       @relation(fields: [clientId], references: [id])
+  consultant            User?                      @relation("ConsultantApplications", fields: [consultantId], references: [id])
+  service               Service?                   @relation(fields: [serviceId], references: [id])
+  consultantAssignments ConsultantAssignment[]
+  notes                 ConsultantNote[]
+  documents             Document[]
+  payments              Payment[]
+
+  @@index([clientId])
+  @@index([consultantId])
+  @@index([status])
+  @@map("applications")
+}
+
+model ApplicationStatusHistory {
+  id            String             @id @default(uuid())
+  applicationId String
+  oldStatus     ApplicationStatus?
+  newStatus     ApplicationStatus
+  changedById   String?
+  changedAt     DateTime           @default(now())
+  reason        String?
+  metadata      Json?
+  application   Application        @relation(fields: [applicationId], references: [id])
+  changedBy     User?              @relation(fields: [changedById], references: [id])
+
+  @@map("application_status_history")
+}
+
+model ConsultantNote {
+  id            String      @id @default(uuid())
+  applicationId String
+  consultantId  String
+  noteType      NoteType
+  content       String
+  isPinned      Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  application   Application @relation(fields: [applicationId], references: [id])
+  consultant    User        @relation(fields: [consultantId], references: [id])
+
+  @@map("consultant_notes")
+}
+
+model Document {
+  id               String            @id @default(uuid())
+  applicationId    String
+  uploadedById     String
+  fileName         String
+  filePath         String
+  fileSize         BigInt
+  mimeType         String?
+  documentType     String?
+  isCurrentVersion Boolean           @default(true)
+  version          Int               @default(1)
+  uploadedAt       DateTime          @default(now())
+  versions         DocumentVersion[]
+  application      Application       @relation(fields: [applicationId], references: [id])
+  uploadedBy       User              @relation(fields: [uploadedById], references: [id])
+
+  @@index([applicationId])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id           String   @id @default(uuid())
+  documentId   String
+  fileName     String
+  filePath     String
+  fileSize     BigInt
+  version      Int
+  uploadedById String
+  uploadedAt   DateTime @default(now())
+  changeReason String?
+  document     Document @relation(fields: [documentId], references: [id])
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+
+  @@map("document_versions")
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  paymentReference      String        @unique
+  bookingId             String?       @unique
+  applicationId         String?
+  userId                String?
+  paymentType           PaymentType
+  amount                Float
+  currency              String        @default("USD")
+  status                PaymentStatus @default(PENDING)
+  stripeSessionId       String?
+  stripePaymentIntentId String?
+  paymentMethod         String?
+  paidAt                DateTime?
+  refundedAt            DateTime?
+  refundAmount          Float?
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  application           Application?  @relation(fields: [applicationId], references: [id])
+  booking               Booking?      @relation(fields: [bookingId], references: [id])
+  user                  User?         @relation(fields: [userId], references: [id])
+
+  @@index([bookingId])
+  @@index([applicationId])
+  @@index([userId])
+  @@index([status])
+  @@index([stripeSessionId])
+  @@map("payments")
+}
+
+model ConsultantAssignment {
+  id               String      @id @default(uuid())
+  applicationId    String
+  consultantId     String
+  assignedById     String
+  assignedAt       DateTime    @default(now())
+  unassignedAt     DateTime?
+  unassignedById   String?
+  unassignedReason String?
+  isCurrent        Boolean     @default(true)
+  application      Application @relation(fields: [applicationId], references: [id])
+  assignedBy       User        @relation("AssignmentsMade", fields: [assignedById], references: [id])
+  consultant       User        @relation("ConsultantAssignment", fields: [consultantId], references: [id])
+  unassignedBy     User?       @relation("AssignmentsUnmade", fields: [unassignedById], references: [id])
+
+  @@map("consultant_assignments")
+}
+
+model Invitation {
+  id          String    @id @default(uuid())
+  email       String
+  role        UserRole
+  token       String    @unique
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  invitedBy   User?     @relation(fields: [invitedById], references: [id])
+
+  @@map("invitations")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  actionType String
+  entityType String?
+  entityId   String?
+  oldData    Json?
+  newData    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model GlobalSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("global_settings")
+}
+
 enum UserRole {
   SUPER_ADMIN
   CONSULTANT
@@ -48,285 +323,3 @@ enum NoteType {
   CLIENT_VISIBLE
 }
 
-model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  passwordHash      String
-  firstName         String
-  lastName          String
-  role              UserRole
-  isActive          Boolean   @default(true)
-  phone             String?
-  profilePictureUrl String?
-  lastLoginAt       DateTime?
-  resetPasswordToken   String?   @unique
-  resetPasswordExpires DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  deactivatedAt     DateTime?
-  deactivatedById   String?
-  deactivatedBy     User?     @relation("UserDeactivated", fields: [deactivatedById], references: [id])
-
-  // Relations
-  bookings          Booking[]
-  applications      Application[]
-  assignedApplications Application[] @relation("ConsultantApplications")
-  notes             ConsultantNote[]
-  documents         Document[]
-  documentVersions  DocumentVersion[]
-  payments          Payment[]
-  activities        ActivityLog[]
-  consultantAssignments ConsultantAssignment[] @relation("ConsultantAssignment")
-  assignmentsMade   ConsultantAssignment[] @relation("AssignmentsMade")
-  invitationsSent   Invitation[]
-  statusChanges     ApplicationStatusHistory[]
-  approvedBookings  Booking[]               @relation("BookingApprovedBy")
-  applicationsAssigned Application[]        @relation("ApplicationAssignedBy")
-  assignmentsUnmade ConsultantAssignment[]  @relation("AssignmentsUnmade")
-  deactivatedUsers  User[]                  @relation("UserDeactivated")
-
-  @@map("users")
-}
-
-model Service {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  serviceType String?
-  basePrice   Float?
-  currency    String   @default("USD")
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  bookings    Booking[]
-  applications Application[]
-
-  @@map("services")
-}
-
-model Booking {
-  id               String         @id @default(uuid())
-  bookingReference String         @unique
-  clientId         String?
-  clientEmail      String
-  clientName       String
-  clientPhone      String?
-  serviceId        String?
-  bookingStatus    BookingStatus  @default(PENDING)
-  scheduledStart   DateTime
-  scheduledEnd     DateTime
-  timezone         String?
-  meetingLink      String?
-  notes            String?
-  cancelledAt      DateTime?
-  cancellationReason String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  approvedById     String?
-  approvedAt       DateTime?
-  completedAt      DateTime?
-
-  // Relations
-  client           User?          @relation(fields: [clientId], references: [id])
-  service          Service?       @relation(fields: [serviceId], references: [id])
-  approvedBy       User?          @relation("BookingApprovedBy", fields: [approvedById], references: [id])
-  payment          Payment?
-
-  @@map("bookings")
-  @@index([clientId])
-  @@index([bookingStatus])
-  @@index([scheduledStart])
-}
-
-model Application {
-  id                  String        @id @default(uuid())
-  applicationNumber   String        @unique
-  clientId            String
-  consultantId        String?
-  serviceId           String?
-  status              ApplicationStatus @default(DRAFT)
-  formData            Json?
-  country             String?
-  submissionDate      DateTime?
-  submittedAt         DateTime?
-  assignedById        String?
-  assignedAt          DateTime?
-  lastStatusChangeAt  DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  closedAt            DateTime?
-  closedReason        String?
-
-  // Relations
-  client              User          @relation(fields: [clientId], references: [id])
-  consultant          User?         @relation("ConsultantApplications", fields: [consultantId], references: [id])
-  service             Service?      @relation(fields: [serviceId], references: [id])
-  assignedBy          User?         @relation("ApplicationAssignedBy", fields: [assignedById], references: [id])
-  statusHistory       ApplicationStatusHistory[]
-  notes               ConsultantNote[]
-  documents           Document[]
-  payments            Payment[]
-  consultantAssignments ConsultantAssignment[]
-
-  @@map("applications")
-  @@index([clientId])
-  @@index([consultantId])
-  @@index([status])
-}
-
-model ApplicationStatusHistory {
-  id            String            @id @default(uuid())
-  applicationId String
-  oldStatus     ApplicationStatus?
-  newStatus     ApplicationStatus
-  changedById   String?
-  changedAt     DateTime          @default(now())
-  reason        String?
-  metadata      Json?
-
-  application   Application       @relation(fields: [applicationId], references: [id])
-  changedBy     User?             @relation(fields: [changedById], references: [id])
-
-  @@map("application_status_history")
-}
-
-model ConsultantNote {
-  id            String   @id @default(uuid())
-  applicationId String
-  consultantId  String
-  noteType      NoteType
-  content       String
-  isPinned      Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  application   Application @relation(fields: [applicationId], references: [id])
-  consultant    User        @relation(fields: [consultantId], references: [id])
-
-  @@map("consultant_notes")
-}
-
-model Document {
-  id                String           @id @default(uuid())
-  applicationId     String
-  uploadedById      String
-  fileName          String
-  filePath          String
-  fileSize          BigInt
-  mimeType          String?
-  documentType      String?
-  isCurrentVersion  Boolean          @default(true)
-  version           Int              @default(1)
-  uploadedAt        DateTime         @default(now())
-
-  application       Application      @relation(fields: [applicationId], references: [id])
-  uploadedBy        User             @relation(fields: [uploadedById], references: [id])
-  versions          DocumentVersion[]
-
-  @@map("documents")
-  @@index([applicationId])
-}
-
-model DocumentVersion {
-  id            String   @id @default(uuid())
-  documentId    String
-  fileName      String
-  filePath      String
-  fileSize      BigInt
-  version       Int
-  uploadedById  String
-  uploadedAt    DateTime @default(now())
-  changeReason  String?
-
-  document      Document @relation(fields: [documentId], references: [id])
-  uploadedBy    User     @relation(fields: [uploadedById], references: [id])
-
-  @@map("document_versions")
-}
-
-model Payment {
-  id                  String        @id @default(uuid())
-  paymentReference    String        @unique
-  bookingId           String?       @unique
-  applicationId       String?
-  userId              String?
-  paymentType         PaymentType
-  amount              Float
-  currency            String        @default("USD")
-  status              PaymentStatus @default(PENDING)
-  stripeSessionId     String?
-  stripePaymentIntentId String?
-  paymentMethod       String?
-  paidAt              DateTime?
-  refundedAt          DateTime?
-  refundAmount        Float?
-  metadata            Json?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-
-  booking             Booking?      @relation(fields: [bookingId], references: [id])
-  application         Application?  @relation(fields: [applicationId], references: [id])
-  user                User?         @relation(fields: [userId], references: [id])
-
-  @@map("payments")
-  @@index([bookingId])
-  @@index([applicationId])
-  @@index([userId])
-  @@index([status])
-  @@index([stripeSessionId])
-}
-
-model ConsultantAssignment {
-  id              String   @id @default(uuid())
-  applicationId   String
-  consultantId    String
-  assignedById    String
-  assignedAt      DateTime @default(now())
-  unassignedAt    DateTime?
-  unassignedById  String?
-  unassignedReason String?
-  isCurrent       Boolean  @default(true)
-
-  application     Application @relation(fields: [applicationId], references: [id])
-  consultant      User        @relation("ConsultantAssignment", fields: [consultantId], references: [id])
-  assignedBy      User        @relation("AssignmentsMade", fields: [assignedById], references: [id])
-  unassignedBy    User?       @relation("AssignmentsUnmade", fields: [unassignedById], references: [id])
-
-  @@map("consultant_assignments")
-}
-
-model Invitation {
-  id          String   @id @default(uuid())
-  email       String
-  role        UserRole
-  token       String   @unique
-  invitedById String?
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  createdAt   DateTime @default(now())
-
-  invitedBy   User?    @relation(fields: [invitedById], references: [id])
-
-  @@map("invitations")
-}
-
-model ActivityLog {
-  id          String   @id @default(uuid())
-  userId      String?
-  actionType  String
-  entityType  String?
-  entityId    String?
-  oldData     Json?
-  newData     Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
-
-  user        User?    @relation(fields: [userId], references: [id])
-
-  @@map("activity_logs")
-  @@index([userId])
-  @@index([entityType, entityId])
-  @@index([createdAt])
-}

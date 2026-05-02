@@ -129,13 +129,15 @@ const getDashboardStats = catchAsync(async (req, res) => {
       },
     }),
   ]);
-
   const [thisMonthRevenue, lastMonthRevenue, thisMonthApplications, thisMonthBookings] = monthlyStats;
 
-  // Calculate growth percentages
-  const revenueGrowth = lastMonthRevenue._sum.amount
-    ? ((thisMonthRevenue._sum.amount || 0) - lastMonthRevenue._sum.amount) / lastMonthRevenue._sum.amount * 100
-    : 0;
+  const thisMonthRev = thisMonthRevenue._sum.amount || 0;
+  const lastMonthRev = lastMonthRevenue._sum.amount || 0;
+
+  // If last month had revenue, calculate % change. If not but this month does, it's 100% growth.
+  const revenueGrowth = lastMonthRev > 0
+    ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 10000) / 100
+    : thisMonthRev > 0 ? 100 : 0;
 
   res.json({
     status: 'success',
@@ -173,20 +175,9 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
   const startDate = from ? new Date(from) : new Date(new Date().getFullYear(), 0, 1);
   const endDate = to ? new Date(to) : new Date();
 
-  let dateFormat;
-  switch (groupBy) {
-    case 'day':
-      dateFormat = 'YYYY-MM-DD';
-      break;
-    case 'month':
-      dateFormat = 'YYYY-MM';
-      break;
-    case 'year':
-      dateFormat = 'YYYY';
-      break;
-    default:
-      dateFormat = 'YYYY-MM';
-  }
+  // Whitelist-safe: only allow known granularity values to prevent SQL injection
+  const safeGroupBy = ['day', 'month', 'year'].includes(groupBy) ? groupBy : 'month';
+  const dateFormat = safeGroupBy === 'day' ? 'YYYY-MM-DD' : safeGroupBy === 'year' ? 'YYYY' : 'YYYY-MM';
 
   // Get revenue by time period
   const revenueByPeriod = await prisma.$queryRawUnsafe(`
@@ -223,8 +214,8 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
   const revenueByService = await prisma.$queryRawUnsafe(`
     SELECT 
       s.name as service_name,
-      COUNT(DISTINCT p.id) as payment_count,
-      SUM(p.amount) as total_amount
+      COUNT(DISTINCT p.id)::int as payment_count,
+      COALESCE(SUM(p.amount), 0) as total_amount
     FROM payments p
     LEFT JOIN applications a ON p."applicationId" = a.id
     LEFT JOIN bookings b ON p."bookingId" = b.id
@@ -246,7 +237,7 @@ const getRevenueAnalytics = catchAsync(async (req, res) => {
       summary: {
         totalRevenue: revenueByPeriod.reduce((sum, item) => sum + Number(item.total_amount), 0),
         totalTransactions: revenueByPeriod.reduce((sum, item) => sum + Number(item.transaction_count), 0),
-        averageTransaction: revenueByPeriod.reduce((sum, item) => sum + Number(item.average_amount), 0) / revenueByPeriod.length || 0,
+        averageTransaction: revenueByPeriod.reduce((sum, item) => sum + Number(item.average_amount), 0) / totalLen,
       },
       revenueByPeriod,
       revenueByType,

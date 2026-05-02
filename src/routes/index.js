@@ -14,6 +14,7 @@ const paymentController = require('../controllers/paymentController');
 const analyticsController = require('../controllers/analyticsController');
 const calcomController = require('../controllers/calcomController');
 const servicesController = require('../controllers/servicesController');
+const settingsController = require('../controllers/settingsController');
 
 const router = express.Router();
 // Health check
@@ -103,6 +104,12 @@ router.get('/analytics/revenue', protect, restrictTo('SUPER_ADMIN'), analyticsCo
 router.get('/analytics/applications', protect, restrictTo('SUPER_ADMIN'), analyticsController.getApplicationAnalytics);
 router.get('/analytics/consultants/performance', protect, restrictTo('SUPER_ADMIN'), analyticsController.getConsultantPerformance);
 router.get('/analytics/logs', protect, restrictTo('SUPER_ADMIN'), analyticsController.getActivityLogs);
+
+// ==================== SETTINGS ROUTES ====================
+
+router.get('/settings/:key', settingsController.getSetting);
+
+router.patch('/settings/:key', protect, restrictTo('SUPER_ADMIN'), settingsController.updateSetting);
 
 // ==================== ERROR HANDLING ====================
 router.use((req, res) => {
