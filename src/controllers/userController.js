@@ -335,7 +335,7 @@ const activateUser = catchAsync(async (req, res) => {
 });
 
 const updateUserProfile = catchAsync(async (req, res) => {
-  const { firstName, lastName, phone } = req.body;
+  const { firstName, lastName, phone, address, city, province, postalCode, emailNotifications, displayLanguage } = req.body;
 
   const updatedUser = await prisma.user.update({
     where: { id: req.user.id },
@@ -343,6 +343,12 @@ const updateUserProfile = catchAsync(async (req, res) => {
       firstName,
       lastName,
       phone,
+      address,
+      city,
+      province,
+      postalCode,
+      emailNotifications: emailNotifications !== undefined ? emailNotifications : undefined,
+      displayLanguage,
     },
     select: {
       id: true,
@@ -351,6 +357,12 @@ const updateUserProfile = catchAsync(async (req, res) => {
       lastName: true,
       phone: true,
       role: true,
+      address: true,
+      city: true,
+      province: true,
+      postalCode: true,
+      emailNotifications: true,
+      displayLanguage: true,
     },
   });
 

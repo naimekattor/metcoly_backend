@@ -28,6 +28,12 @@ const protect = catchAsync(async (req, res, next) => {
         firstName: true,
         lastName: true,
         phone: true,
+        address: true,
+        city: true,
+        province: true,
+        postalCode: true,
+        emailNotifications: true,
+        displayLanguage: true,
         createdAt: true,
         _count: {
           select: {

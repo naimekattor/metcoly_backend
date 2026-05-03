@@ -33,6 +33,7 @@ router.post('/auth/logout', protect, authController.logout);
 router.get('/auth/me', protect, authController.getMe);
 router.post('/auth/forgot-password', authController.forgotPassword);
 router.post('/auth/reset-password/:token', authController.resetPassword);
+router.patch('/auth/change-password', protect, authController.changePassword);
 
 // ==================== USER ROUTES ====================
 router.get('/users', protect, restrictTo('SUPER_ADMIN'), userController.getAllUsers);

@@ -16,6 +16,12 @@ model User {
   isActive              Boolean                    @default(true)
   phone                 String?
   profilePictureUrl     String?
+  address               String?
+  city                  String?
+  province              String?
+  postalCode            String?
+  emailNotifications    Boolean                    @default(true)
+  displayLanguage       String                     @default("en")
   lastLoginAt           DateTime?
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt

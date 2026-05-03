@@ -275,6 +275,40 @@ const resetPassword = catchAsync(async (req, res) => {
   });
 });
 
+const changePassword = catchAsync(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+  });
+
+  if (!user || !(await authService.comparePasswords(currentPassword, user.passwordHash))) {
+    throw new AppError('Current password is incorrect', 400);
+  }
+
+  const hashedPassword = await authService.hashPassword(newPassword);
+
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { passwordHash: hashedPassword },
+  });
+
+  await authService.createActivityLog(
+    user.id,
+    'PASSWORD_CHANGED',
+    'USER',
+    user.id,
+    null,
+    null,
+    req
+  );
+
+  res.json({
+    status: 'success',
+    message: 'Password updated successfully',
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -283,4 +317,5 @@ module.exports = {
   getMe,
   forgotPassword,
   resetPassword,
+  changePassword,
 };

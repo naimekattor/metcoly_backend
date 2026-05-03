@@ -91,6 +91,12 @@ const getMyApplications = catchAsync(async (req, res) => {
           createdAt: true,
         },
       },
+      statusHistory: {
+        orderBy: {
+          changedAt: 'desc',
+        },
+        take: 5,
+      },
     },
     orderBy: {
       createdAt: 'desc',
